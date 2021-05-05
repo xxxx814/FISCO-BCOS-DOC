@@ -1,5 +1,8 @@
 # 智能合约开发
 
+标签：``Solidity`` ``智能合约`` ``合约开发`` ``预编译合约``
+
+----
 FISCO BCOS平台目前支持Solidity及Precompiled两类合约形式。
 
 - Solidity合约与以太坊相同，用Solidity语法实现。
@@ -9,8 +12,14 @@ FISCO BCOS平台目前支持Solidity及Precompiled两类合约形式。
 
 ### [Solidity合约开发](https://solidity.readthedocs.io/en/latest/)
 
+- [WeBASE合约IDE](https://webasedoc.readthedocs.io/zh_CN/latest/)
 - [Solidity官方文档](https://solidity.readthedocs.io/en/latest/)
 - [Remix在线IDE](https://remix.ethereum.org/)
+
+```eval_rst
+.. important::
+    国密环境下统一使用了国密商用密码相关算法，在solidity中使用keccak256/sha3指令，虚拟机中实际执行sm3算法！
+```
 
 ### 使用KVTable合约读写接口
 
@@ -212,69 +221,77 @@ contract Table {
 提供一个合约案例`TableTest.sol`，代码如下：
 
 ```js
-pragma solidity ^0.4.24;
+pragma solidity>=0.4.24 <0.6.11;
+pragma experimental ABIEncoderV2;
 
 import "./Table.sol";
 
 contract TableTest {
-    event CreateResult(int count);
-    event InsertResult(int count);
-    event UpdateResult(int count);
-    event RemoveResult(int count);
+    event CreateResult(int256 count);
+    event InsertResult(int256 count);
+    event UpdateResult(int256 count);
+    event RemoveResult(int256 count);
 
-    // 创建表
-    function create() public returns(int){
-        TableFactory tf = TableFactory(0x1001);  // TableFactory的地址固定为0x1001
-        // 创建t_test表，表的key_field为name，value_field为item_id,item_name
-        // key_field表示AMDB主key value_field表示表中的列，可以有多列，以逗号分隔
-        int count = tf.createTable("t_test", "name", "item_id,item_name");
-        emit CreateResult(count);
-
-        return count;
+    TableFactory tableFactory;
+    string constant TABLE_NAME = "t_test";
+    constructor() public {
+        tableFactory = TableFactory(0x1001); //The fixed address is 0x1001 for TableFactory
+        // the parameters of createTable are tableName,keyField,"vlaueFiled1,vlaueFiled2,vlaueFiled3,..."
+        tableFactory.createTable(TABLE_NAME, "name", "item_id,item_name");
     }
 
-    // 查询数据
-    function select(string name) public constant returns(bytes32[], int[], bytes32[]){
-        TableFactory tf = TableFactory(0x1001);
-        Table table = tf.openTable("t_test");
+    //select records
+    function select(string memory name)
+    public
+    view
+    returns (string[] memory, int256[] memory, string[] memory)
+    {
+        Table table = tableFactory.openTable(TABLE_NAME);
 
-        // 条件为空表示不筛选 也可以根据需要使用条件筛选
         Condition condition = table.newCondition();
 
         Entries entries = table.select(name, condition);
-        bytes32[] memory user_name_bytes_list = new bytes32[](uint256(entries.size()));
-        int[] memory item_id_list = new int[](uint256(entries.size()));
-        bytes32[] memory item_name_bytes_list = new bytes32[](uint256(entries.size()));
+        string[] memory user_name_bytes_list = new string[](
+            uint256(entries.size())
+        );
+        int256[] memory item_id_list = new int256[](uint256(entries.size()));
+        string[] memory item_name_bytes_list = new string[](
+            uint256(entries.size())
+        );
 
-        for(int i=0; i<entries.size(); ++i) {
+        for (int256 i = 0; i < entries.size(); ++i) {
             Entry entry = entries.get(i);
 
-            user_name_bytes_list[uint256(i)] = entry.getBytes32("name");
+            user_name_bytes_list[uint256(i)] = entry.getString("name");
             item_id_list[uint256(i)] = entry.getInt("item_id");
-            item_name_bytes_list[uint256(i)] = entry.getBytes32("item_name");
+            item_name_bytes_list[uint256(i)] = entry.getString("item_name");
         }
 
         return (user_name_bytes_list, item_id_list, item_name_bytes_list);
     }
-    // 插入数据
-    function insert(string name, int item_id, string item_name) public returns(int) {
-        TableFactory tf = TableFactory(0x1001);
-        Table table = tf.openTable("t_test");
+    //insert records
+    function insert(string memory name, int256 item_id, string memory item_name)
+    public
+    returns (int256)
+    {
+        Table table = tableFactory.openTable(TABLE_NAME);
 
         Entry entry = table.newEntry();
         entry.set("name", name);
         entry.set("item_id", item_id);
         entry.set("item_name", item_name);
 
-        int count = table.insert(name, entry);
+        int256 count = table.insert(name, entry);
         emit InsertResult(count);
 
         return count;
     }
-    // 更新数据
-    function update(string name, int item_id, string item_name) public returns(int) {
-        TableFactory tf = TableFactory(0x1001);
-        Table table = tf.openTable("t_test");
+    //update records
+    function update(string memory name, int256 item_id, string memory item_name)
+    public
+    returns (int256)
+    {
+        Table table = tableFactory.openTable(TABLE_NAME);
 
         Entry entry = table.newEntry();
         entry.set("item_name", item_name);
@@ -283,21 +300,20 @@ contract TableTest {
         condition.EQ("name", name);
         condition.EQ("item_id", item_id);
 
-        int count = table.update(name, entry, condition);
+        int256 count = table.update(name, entry, condition);
         emit UpdateResult(count);
 
         return count;
     }
-    // 删除数据
-    function remove(string name, int item_id) public returns(int){
-        TableFactory tf = TableFactory(0x1001);
-        Table table = tf.openTable("t_test");
+    //remove records
+    function remove(string memory name, int256 item_id) public returns (int256) {
+        Table table = tableFactory.openTable(TABLE_NAME);
 
         Condition condition = table.newCondition();
         condition.EQ("name", name);
         condition.EQ("item_id", item_id);
 
-        int count = table.remove(name, condition);
+        int256 count = table.remove(name, condition);
         emit RemoveResult(count);
 
         return count;
@@ -355,7 +371,9 @@ contract TableTest {
 
 FISCO BCOS中实现的precompild合约列表以及地址分配：
 
-| 地址   | 功能           | 源码([libprecompiled目录](https://github.com/FISCO-BCOS/FISCO-BCOS/tree/master/libprecompiled)) |
+源码可见：([libprecompiled GitHub目录](https://github.com/FISCO-BCOS/FISCO-BCOS/tree/master/libprecompiled))、([libprecompiled Gitee目录](https://gitee.com/FISCO-BCOS/FISCO-BCOS/tree/master/libprecompiled))
+
+| 地址   | 功能           | 源码|
 | ------ | -------------- | ----------------------------------------------------------------------------------------------- |
 | 0x1000 | 系统参数管理   | SystemConfigPrecompiled.cpp                                                                     |
 | 0x1001 | 表工厂合约     | TableFactoryPrecompiled.cpp                                                                     |
@@ -391,7 +409,7 @@ FISCO BCOS中实现的precompild合约列表以及地址分配：
 
 - **实现调用逻辑**
 
-实现新增合约的调用逻辑，需要新实现一个c++类，该类需要继承[Precompiled](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/Precompiled.h#L37), 重载call函数， 在call函数中实现各个接口的调用行为。
+实现新增合约的调用逻辑，需要新实现一个c++类，该类需要继承`Precompiled`类, 重载call函数， 在call函数中实现各个接口的调用行为。可参考源码：[Precompiled GitHub源码](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/Precompiled.h#L42)、[Precompiled Gitee源码](https://gitee.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/Precompiled.h#L42)
 
 ```cpp
     // libprecompiled/Precompiled.h
@@ -412,7 +430,8 @@ call函数有三个参数：
 如何实现一个Precompiled类在下面的sample中会详细说明。
 - **注册合约**
 
-最后需要将合约的地址与对应的类注册到合约的执行上下文，这样通过地址调用precompiled合约时合约的执行逻辑才能被正确识别执行， 查看注册的[预编译合约列表](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libblockverifier/ExecutiveContextFactory.cpp#L36)。
+最后需要将合约的地址与对应的类注册到合约的执行上下文，这样通过地址调用precompiled合约时合约的执行逻辑才能被正确识别执行， 查看注册的`预编译合约列表`。可参考链接：[预编译合约列表 GitHub链接](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libblockverifier/ExecutiveContextFactory.cpp#L50)，[预编译合约列表 Gitee链接](https://gitee.com/FISCO-BCOS/FISCO-BCOS/blob/master/libblockverifier/ExecutiveContextFactory.cpp#L50)
+
 注册路径：
 
 ```
@@ -444,7 +463,8 @@ contract HelloWorld{
 ```
 
 上述源码为solidity编写的HelloWorld合约， 本章节会实现一个相同功能的预编译合约，通过step by step使用户对预编译合约编写有直观的认识。
-示例的c++[源码路径](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/extension/HelloWorldPrecompiled.cpp)：
+
+示例的c++[GitHub源码路径](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/extension/HelloWorldPrecompiled.cpp)或[Gitee源码路径](https://gitee.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/extension/HelloWorldPrecompiled.cpp)：
 
 ```cpp
     libprecompiled/extension/HelloWorldPrecompiled.h
@@ -482,16 +502,16 @@ HelloWorldPrecompiled需要存储set的字符串值，所以涉及到存储操�
 | --------- | ----------- |
 | hello_key | hello_value |
 
-
-
 该表只存储一对键值对，key字段为hello_key，value字段为hello_value 存储对应的字符串值，可以通过set(string)接口修改，通过get()接口获取。
 
 ##### 2.2.4 实现调用逻辑
-添加HelloWorldPrecompiled类，重载call函数，实现所有接口的调用行为，[call函数源码](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/extension/HelloWorldPrecompiled.cpp#L66)。
+
+添加HelloWorldPrecompiled类，重载call函数，实现所有接口的调用行为，[call函数 GitHub源码](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/extension/HelloWorldPrecompiled.cpp#L66)/[call函数 Gitee源码](https://gitee.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/extension/HelloWorldPrecompiled.cpp#L66)。
 
 用户自定义的Precompiled合约需要新增一个类，在类中定义合约的调用行为，在示例中添加HelloWorldPrecompiled类，然后主要需要完成以下工作：
 
 - 接口注册
+
 ```c++
 // 定义类中所有的接口
 const char* const HELLO_WORLD_METHOD_GET = "get()";
@@ -594,8 +614,8 @@ abi.abiOut(out, strOut1, strOut2, amount);
 // amoumt = 11111
 ```
 
+最后，给出HelloWorldPrecompiled call函数的完整实现[GitHub源码链接](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/extension/HelloWorldPrecompiled.cpp#L63)或[Gitee源码链接](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/extension/HelloWorldPrecompiled.cpp#L63)。
 
-最后，给出HelloWorldPrecompiled call函数的完整实现[源码链接](https://github.com/FISCO-BCOS/FISCO-BCOS/blob/master/libprecompiled/extension/HelloWorldPrecompiled.cpp#L66)。
 ```c++
 bytes HelloWorldPrecompiled::call(dev::blockverifier::ExecutiveContext::Ptr _context,
     bytesConstRef _param, Address const& _origin)
@@ -692,10 +712,10 @@ void dev::blockverifier::ExecutiveContextFactory::registerUserPrecompiled(dev::b
 **注意**：实现的HelloWorldPrecompiled.cpp和头文件需要放置于FISCO-BCOS/libprecompiled/extension目录下。
 
 - 搭建FISCO BCOS联盟链。
-假设当前位于`FISCO-BCOS/build`目录下，则使用下面的指令搭建本机4节点的链指令如下。更多选项[参考这里](build_chain.md)。
+假设当前位于`FISCO-BCOS/build`目录下，则使用下面的指令搭建本机4节点的链指令如下。更多选项[参考这里](../manual/build_chain.md)。
 
 ```bash
-bash ../tools/build_chain.sh -l 127.0.0.1:4 -e bin/fisco-bcos
+bash ../manual/build_chain.sh -l 127.0.0.1:4 -e bin/fisco-bcos
 ```
 
 ### 三 调用
